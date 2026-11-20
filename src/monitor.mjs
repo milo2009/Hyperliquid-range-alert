@@ -196,7 +196,6 @@ async function checkLps(cfg, address) {
         line: `Prix ${fmtPrice(price)} ${t1.symbol}/${t0.symbol} | range ${fmtPrice(min)} → ${fmtPrice(max)}`,
         suggestion,
         click: m.url,
-        clickLabel: name.split(' ')[0],
       });
     }
   }
@@ -390,15 +389,13 @@ async function main() {
     if (reason) {
       const t = TEXT[it.kind][it.level];
       const prefix = reason === 'reminder' ? '(rappel) ' : '';
-      const actions = [];
-      if (it.click) actions.push({ label: it.clickLabel || 'Ouvrir', url: it.click });
-      if (cfg.dashboardUrl) actions.push({ label: 'Tableau de bord', url: cfg.dashboardUrl });
+      // Le wallet reste sur le PC : sur le téléphone, la notif ouvre le tableau de bord (pas le DEX).
       await notify({
         title: `${prefix}${t.title} — ${it.label}`,
         message: [it.source, it.detail, it.line, it.suggestion].filter(Boolean).join('\n'),
         priority: t.priority,
-        click: it.click || cfg.dashboardUrl,
-        actions,
+        click: cfg.dashboardUrl || it.click,
+        actions: cfg.dashboardUrl ? [{ label: 'Tableau de bord', url: cfg.dashboardUrl }] : [],
       });
       notifiedAt = now;
       console.log(`→ notification envoyée (${reason})`);

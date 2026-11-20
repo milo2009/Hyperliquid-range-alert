@@ -20,7 +20,7 @@ Les positions sont détectées automatiquement (NFT LP détenus par l'adresse + 
 
 Pas de spam : une alerte n'est envoyée qu'au changement d'état (l'état est mémorisé entre deux exécutions).
 
-Chaque alerte contient des boutons **HyperSwap** (ou Hyperliquid) et **Tableau de bord**. Une alerte LP propose aussi une nouvelle range de même largeur, recentrée sur le prix actuel.
+Un tap sur une alerte (ou son bouton **Tableau de bord**) ouvre la web-app. Une alerte LP propose aussi une nouvelle range de même largeur, recentrée sur le prix actuel.
 
 **Heures calmes** (par défaut 23:00 → 08:00, heure de Paris) : seule la première alerte 🚨 passe. Les ⚠️, rappels et retours à la normale sont retenus puis envoyés à la fin de la plage si la situation dure.
 
