@@ -1,0 +1,25 @@
+{
+  "address": null,
+
+  "remindEveryHours": 4,
+  "notifyAfterConsecutiveFailures": 3,
+
+  "lp": {
+    "nearEdgePct": 3,
+    "positionManagers": [
+      {
+        "name": "HyperSwap V3",
+        "address": "0x6eDA206207c09e5428F281761DdC0D300851fBC8",
+        "extraTokenIds": [],
+        "ignoreTokenIds": []
+      }
+    ]
+  },
+
+  "perps": {
+    "enabled": true,
+    "liqWarnPct": 15,
+    "liqDangerPct": 7,
+    "ranges": {}
+  }
+}

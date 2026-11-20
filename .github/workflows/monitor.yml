@@ -1,0 +1,54 @@
+name: Surveillance positions
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # toutes les 5 min (GitHub peut retarder de quelques minutes)
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Envoyer une notification de test'
+        type: boolean
+        default: false
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --omit=dev
+
+      # L'état (dernières alertes envoyées) est conservé entre deux exécutions via le cache,
+      # pour ne pas renvoyer la même alerte toutes les 5 minutes.
+      - name: Restaurer l'état
+        uses: actions/cache/restore@v4
+        with:
+          path: .state
+          key: monitor-state-${{ github.run_id }}
+          restore-keys: monitor-state-
+
+      - name: Vérifier les positions
+        env:
+          WALLET_ADDRESS: ${{ secrets.WALLET_ADDRESS }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: node src/monitor.mjs ${{ inputs.test && '--test' || '' }}
+
+      - name: Sauvegarder l'état
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .state
+          key: monitor-state-${{ github.run_id }}

@@ -1,0 +1,19 @@
+{
+  "name": "hyperliquid-range-alert",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/monitor.mjs",
+  "scripts": {
+    "start": "node src/monitor.mjs",
+    "status": "node src/monitor.mjs --status",
+    "test-notif": "node src/monitor.mjs --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "viem": "^2.58.2"
+  }
+}
