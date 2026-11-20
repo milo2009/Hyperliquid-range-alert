@@ -20,6 +20,24 @@ Les positions sont détectées automatiquement (NFT LP détenus par l'adresse + 
 
 Pas de spam : une alerte n'est envoyée qu'au changement d'état (l'état est mémorisé entre deux exécutions).
 
+Chaque alerte contient des boutons **HyperSwap** (ou Hyperliquid) et **Tableau de bord**. Une alerte LP propose aussi une nouvelle range de même largeur, recentrée sur le prix actuel.
+
+**Heures calmes** (par défaut 23:00 → 08:00, heure de Paris) : seule la première alerte 🚨 passe. Les ⚠️, rappels et retours à la normale sont retenus puis envoyés à la fin de la plage si la situation dure.
+
+## Web-app mobile
+
+Le dossier `docs/` contient une web-app installable (tableau de bord + réglages), servie par GitHub Pages.
+
+- **Tableau de bord** : prix, état de chaque range (barre visuelle avec zones « proche du bord »), valeur des positions, frais non réclamés, perps.
+- **Réglages** : modifie `config.json` directement dans le dépôt (commit). Les changements s'appliquent au passage suivant du workflow.
+
+Mise en route :
+1. **Settings → Pages** → Source « Deploy from a branch » → Branch `main`, dossier `/docs` → Save. L'app est servie sur `https://<toi>.github.io/<depot>/` après 1 à 2 minutes.
+2. Sur le téléphone, ouvre `https://<toi>.github.io/<depot>/#address=0xTON_ADRESSE` dans Chrome, puis menu ⋮ → **Ajouter à l'écran d'accueil**.
+3. Pour enregistrer des réglages depuis l'app, crée un token GitHub **fine-grained** limité à ce dépôt avec la seule permission **Contents : Read and write**, puis colle-le dans Réglages → « Cet appareil ». Il reste stocké uniquement dans le navigateur du téléphone.
+
+L'adresse, le token et le topic ntfy saisis dans l'app ne sont jamais publiés.
+
 ## Mise en route
 
 ### 1. Téléphone : ntfy
@@ -59,6 +77,9 @@ C'est tout : le workflow tourne ensuite toutes les ~5 minutes. GitHub peut retar
 | `perps.liqWarnPct` / `perps.liqDangerPct` | distance au prix de liquidation pour ⚠️ / 🚨 | `15` / `7` |
 | `perps.ranges` | range de prix perso par coin, ex. `{"HYPE": {"min": 50, "max": 70}}` | `{}` |
 | `remindEveryHours` | rappel tant que c'est hors range (`0` = jamais) | `4` |
+| `quietHours` | heures calmes : `enabled`, `start`, `end`, `timezone` | 23:00 → 08:00 Europe/Paris |
+| `dashboardUrl` | lien « Tableau de bord » dans les notifs | URL GitHub Pages |
+| `lp.positionManagers[].url` | lien du bouton DEX dans les notifs | page Portfolio HyperSwap |
 
 Pour ajouter un autre DEX HyperEVM de type Uniswap V3, ajoute son contrat « NonfungiblePositionManager » dans `lp.positionManagers`.
 
@@ -75,4 +96,5 @@ node src/monitor.mjs --test        # envoie une notif de test
 ## Détails techniques
 
 - LP : lecture on-chain sur HyperEVM (`rpc.hyperliquid.xyz/evm`) du contrat HyperSwap V3 NonfungiblePositionManager `0x6eDA206207c09e5428F281761DdC0D300851fBC8` (`positions()`), puis du `slot0()` du pool. La position est dans la range si `tickLower ≤ tick < tickUpper`, la même règle que l'interface HyperSwap.
+- Frais non réclamés (web-app) : simulation de `collect()` (eth_call, aucune transaction).
 - Perps : API publique `api.hyperliquid.xyz/info` (`clearinghouseState` + `allMids`).

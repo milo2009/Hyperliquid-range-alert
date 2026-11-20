@@ -1,8 +1,16 @@
 {
   "address": null,
+  "dashboardUrl": "https://milo2009.github.io/Hyperliquid-range-alert/",
 
   "remindEveryHours": 4,
   "notifyAfterConsecutiveFailures": 3,
+
+  "quietHours": {
+    "enabled": true,
+    "start": "23:00",
+    "end": "08:00",
+    "timezone": "Europe/Paris"
+  },
 
   "lp": {
     "nearEdgePct": 3,
@@ -10,6 +18,7 @@
       {
         "name": "HyperSwap V3",
         "address": "0x6eDA206207c09e5428F281761DdC0D300851fBC8",
+        "url": "https://app.hyperswap.exchange/portfolio",
         "extraTokenIds": [],
         "ignoreTokenIds": []
       }

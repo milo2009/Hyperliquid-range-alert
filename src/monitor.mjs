@@ -95,6 +95,7 @@ const npmAbi = parseAbi([
 const factoryAbi = parseAbi(['function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)']);
 const poolAbi = parseAbi([
   'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)',
+  'function tickSpacing() view returns (int24)',
 ]);
 const erc20Abi = parseAbi(['function symbol() view returns (string)', 'function decimals() view returns (uint8)']);
 
@@ -148,11 +149,11 @@ async function checkLps(cfg, address) {
       if (!poolCache.has(poolKey)) {
         poolCache.set(poolKey, (async () => {
           const pool = await read(factory, factoryAbi, 'getPool', [token0, token1, fee]);
-          const slot0 = await read(pool, poolAbi, 'slot0');
-          return { pool, tick: Number(slot0[1]) };
+          const [slot0, spacing] = await Promise.all([read(pool, poolAbi, 'slot0'), read(pool, poolAbi, 'tickSpacing')]);
+          return { pool, tick: Number(slot0[1]), spacing: Number(spacing) };
         })());
       }
-      const [{ tick }, t0, t1] = await Promise.all([poolCache.get(poolKey), tokenInfo(token0), tokenInfo(token1)]);
+      const [{ tick, spacing }, t0, t1] = await Promise.all([poolCache.get(poolKey), tokenInfo(token0), tokenInfo(token1)]);
 
       // Prix de token0 exprimé en token1 (ex. USDC par WHYPE).
       const toPrice = (t) => Math.pow(1.0001, t) * 10 ** (t0.decimals - t1.decimals);
@@ -177,6 +178,14 @@ async function checkLps(cfg, address) {
         detail = `in range, à ${fmtPct(closest)} du ${side}`;
       }
 
+      // Suggestion : même largeur de range, recentrée sur le prix actuel (alignée sur le tickSpacing du pool).
+      let suggestion;
+      if (level !== 'ok') {
+        const width = Number(tickUpper) - Number(tickLower);
+        const lower = Math.round((tick - width / 2) / spacing) * spacing;
+        suggestion = `Nouvelle range suggérée (même largeur, centrée) : ${fmtPrice(toPrice(lower))} → ${fmtPrice(toPrice(lower + width))}`;
+      }
+
       results.push({
         key: `lp:${npm}:${id}`,
         kind: 'lp',
@@ -185,7 +194,9 @@ async function checkLps(cfg, address) {
         source: `${name} ${Number(fee) / 10000}%`,
         detail,
         line: `Prix ${fmtPrice(price)} ${t1.symbol}/${t0.symbol} | range ${fmtPrice(min)} → ${fmtPrice(max)}`,
+        suggestion,
         click: m.url,
+        clickLabel: name.split(' ')[0],
       });
     }
   }
@@ -253,18 +264,23 @@ async function checkPerps(cfg, address) {
 // ---------------------------------------------------------------------------
 // Notifications
 
-async function notify({ title, message, priority = 3, tags = [], click }) {
+// actions : boutons ntfy (max 3), ex. [{ label: 'HyperSwap', url: 'https://…' }]
+async function notify({ title, message, priority = 3, click, actions = [] }) {
   const topic = process.env.NTFY_TOPIC;
   if (!topic) {
-    console.log(`[ntfy désactivé: NTFY_TOPIC absent] ${title}\n${message}`);
+    console.log(`[ntfy désactivé: NTFY_TOPIC absent] ${title}\n${message}${actions.length ? `\n[boutons: ${actions.map((a) => a.label).join(', ')}]` : ''}`);
     return;
   }
+  const payload = {
+    topic, title, message, priority,
+    ...(click ? { click } : {}),
+    ...(actions.length ? { actions: actions.slice(0, 3).map((a) => ({ action: 'view', label: a.label, url: a.url, clear: true })) } : {}),
+  };
   await retry(async () => {
     const res = await fetch(NTFY_SERVER, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Pas de "tags" envoyés : les emojis sont déjà dans le titre (sinon ntfy les affiche en double).
-      body: JSON.stringify({ topic, title, message, priority, ...(click ? { click } : {}) }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status} ${await res.text()}`);
   }, 'ntfy');
@@ -272,14 +288,14 @@ async function notify({ title, message, priority = 3, tags = [], click }) {
 
 const TEXT = {
   lp: {
-    out: { title: '🚨 OUT OF RANGE', priority: 5, tags: ['rotating_light'] },
-    near: { title: '⚠️ Proche du bord de range', priority: 4, tags: ['warning'] },
-    ok: { title: '✅ De retour dans la range', priority: 3, tags: ['white_check_mark'] },
+    out: { title: '🚨 OUT OF RANGE', priority: 5 },
+    near: { title: '⚠️ Proche du bord de range', priority: 4 },
+    ok: { title: '✅ De retour dans la range', priority: 3 },
   },
   perp: {
-    out: { title: '🚨 Liquidation proche', priority: 5, tags: ['rotating_light'] },
-    near: { title: '⚠️ Liquidation à surveiller', priority: 4, tags: ['warning'] },
-    ok: { title: '✅ Position perp sécurisée', priority: 3, tags: ['white_check_mark'] },
+    out: { title: '🚨 Liquidation proche', priority: 5 },
+    near: { title: '⚠️ Liquidation à surveiller', priority: 4 },
+    ok: { title: '✅ Position perp sécurisée', priority: 3 },
   },
 };
 
@@ -294,6 +310,29 @@ function decide(item, prev, now, cfg) {
   return null;
 }
 
+// Heures calmes : config.quietHours = { enabled, start: "23:00", end: "08:00", timezone: "Europe/Paris" }.
+function isQuietTime(qh, date = new Date()) {
+  if (!qh?.enabled) return false;
+  const toMin = (s) => {
+    const [h, m] = String(s).split(':').map(Number);
+    return h * 60 + (m || 0);
+  };
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: qh.timezone || 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  const now = Number(parts.find((p) => p.type === 'hour').value) * 60 + Number(parts.find((p) => p.type === 'minute').value);
+  const start = toMin(qh.start ?? '23:00');
+  const end = toMin(qh.end ?? '08:00');
+  if (start === end) return false;
+  return start < end ? now >= start && now < end : now >= start || now < end; // plage qui passe minuit
+}
+
+// Pendant les heures calmes, seule la première alerte 🚨 passe (pas les ⚠️, rappels ni retours à la normale).
+// Une alerte retenue n'est pas « consommée » : elle part à la fin des heures calmes si la situation dure.
+function allowedDuringQuiet(item, reason) {
+  return item.level === 'out' && (reason === 'new' || reason === 'worse');
+}
+
 // ---------------------------------------------------------------------------
 
 async function main() {
@@ -303,7 +342,12 @@ async function main() {
   const address = getAddress(rawAddress.trim());
 
   if (TEST) {
-    await notify({ title: '🔔 Test Hyperliquid range alert', message: `Les notifications fonctionnent pour ${address.slice(0, 6)}…${address.slice(-4)}.`, tags: ['bell'] });
+    await notify({
+      title: '🔔 Test Hyperliquid range alert',
+      message: `Les notifications fonctionnent pour ${address.slice(0, 6)}…${address.slice(-4)}.`,
+      click: cfg.dashboardUrl,
+      actions: cfg.dashboardUrl ? [{ label: 'Tableau de bord', url: cfg.dashboardUrl }] : [],
+    });
     console.log('Notification de test envoyée.');
     return;
   }
@@ -329,20 +373,32 @@ async function main() {
 
   if (STATUS_ONLY) return;
 
+  const quiet = isQuietTime(cfg.quietHours);
+  if (quiet) console.log('(heures calmes : seules les nouvelles alertes 🚨 sont envoyées)');
+
   const next = { items: {}, failures: errors.length ? (state.failures || 0) + 1 : 0, failureNotified: state.failureNotified };
   for (const it of items) {
     const prev = state.items[it.key];
     const reason = decide(it, prev, now, cfg);
+    if (reason && quiet && !allowedDuringQuiet(it, reason)) {
+      // On garde l'ancien état tel quel pour que l'alerte parte après les heures calmes si besoin.
+      if (prev) next.items[it.key] = prev;
+      console.log(`→ notification retenue (heures calmes, ${reason})`);
+      continue;
+    }
     let notifiedAt = prev?.notifiedAt || 0;
     if (reason) {
       const t = TEXT[it.kind][it.level];
       const prefix = reason === 'reminder' ? '(rappel) ' : '';
+      const actions = [];
+      if (it.click) actions.push({ label: it.clickLabel || 'Ouvrir', url: it.click });
+      if (cfg.dashboardUrl) actions.push({ label: 'Tableau de bord', url: cfg.dashboardUrl });
       await notify({
         title: `${prefix}${t.title} — ${it.label}`,
-        message: `${it.source}\n${it.detail}\n${it.line}`,
+        message: [it.source, it.detail, it.line, it.suggestion].filter(Boolean).join('\n'),
         priority: t.priority,
-        tags: t.tags,
-        click: it.click,
+        click: it.click || cfg.dashboardUrl,
+        actions,
       });
       notifiedAt = now;
       console.log(`→ notification envoyée (${reason})`);
@@ -357,7 +413,7 @@ async function main() {
   // Alerte si la surveillance elle-même est cassée plusieurs fois de suite (une seule fois).
   const failAfter = cfg.notifyAfterConsecutiveFailures ?? 3;
   if (next.failures >= failAfter && !state.failureNotified) {
-    await notify({ title: '❗ Surveillance en échec', message: errors.join('\n'), priority: 4, tags: ['x'] });
+    await notify({ title: '❗ Surveillance en échec', message: errors.join('\n'), priority: 4 });
     next.failureNotified = true;
   } else if (next.failures === 0) {
     next.failureNotified = false;

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://rpc.hyperliquid.xyz https://api.hyperliquid.xyz https://api.github.com https://raw.githubusercontent.com https://ntfy.sh; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#1a1a19">
+  <title>Range Alert</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Range Alert</h1>
+      <p id="updated" class="muted small">Chargement…</p>
+    </div>
+    <button id="refresh" class="icon-btn" aria-label="Rafraîchir">⟳</button>
+  </header>
+
+  <main>
+    <section id="positions" aria-live="polite"></section>
+
+    <section id="settings" hidden>
+      <form id="settings-form" class="card">
+        <h2>Alertes</h2>
+
+        <fieldset>
+          <legend>Liquidité concentrée</legend>
+          <label>Alerte « proche du bord » quand le prix est à moins de
+            <span class="input-unit"><input name="nearEdgePct" type="number" step="0.5" min="0" max="50" inputmode="decimal"><span>%</span></span>
+          </label>
+          <label>Positions à suivre en plus (n° séparés par des virgules, ex. stakées)
+            <input name="extraIds" placeholder="192800, 192801" inputmode="numeric">
+          </label>
+          <label>Positions à ignorer
+            <input name="ignoreIds" placeholder="" inputmode="numeric">
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Perps Hyperliquid</legend>
+          <label class="switch"><input name="perpsEnabled" type="checkbox"> Surveiller les perps</label>
+          <div class="row2">
+            <label>⚠️ liquidation à moins de
+              <span class="input-unit"><input name="liqWarnPct" type="number" step="0.5" inputmode="decimal"><span>%</span></span>
+            </label>
+            <label>🚨 liquidation à moins de
+              <span class="input-unit"><input name="liqDangerPct" type="number" step="0.5" inputmode="decimal"><span>%</span></span>
+            </label>
+          </div>
+          <p class="small muted">Ranges de prix perso (alerte 🚨 si le prix en sort) :</p>
+          <div id="ranges"></div>
+          <button type="button" id="add-range" class="btn ghost small-btn">+ Ajouter une range</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Rythme</legend>
+          <label>Rappel tant que c’est hors range, toutes les
+            <span class="input-unit"><input name="remindEveryHours" type="number" step="1" min="0" max="168" inputmode="numeric"><span>h</span></span>
+          </label>
+          <label class="switch"><input name="quietEnabled" type="checkbox"> Heures calmes (seules les 🚨 passent)</label>
+          <div class="row2">
+            <label>De <input name="quietStart" type="time"></label>
+            <label>À <input name="quietEnd" type="time"></label>
+          </div>
+        </fieldset>
+
+        <button type="submit" class="btn">Enregistrer sur GitHub</button>
+        <p id="settings-msg" class="msg" role="status"></p>
+      </form>
+
+      <form id="device-form" class="card">
+        <h2>Cet appareil</h2>
+        <p class="small muted">Stocké uniquement sur ce téléphone.</p>
+        <label>Adresse publique du wallet
+          <input name="address" placeholder="0x…" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Token GitHub (pour enregistrer les réglages)
+          <input name="token" type="password" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Dépôt
+          <input name="repo" placeholder="owner/depot" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Topic ntfy (optionnel, pour le bouton de test)
+          <input name="topic" placeholder="mon-topic" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="row2">
+          <button type="submit" class="btn">Enregistrer</button>
+          <button type="button" id="test-notif" class="btn ghost">Tester la notif</button>
+        </div>
+        <p id="device-msg" class="msg" role="status"></p>
+      </form>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-tab="positions" aria-current="page"><span aria-hidden="true">◉</span>Positions</button>
+    <button data-tab="settings"><span aria-hidden="true">⚙</span>Réglages</button>
+  </nav>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
