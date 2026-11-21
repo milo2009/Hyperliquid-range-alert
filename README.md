@@ -63,9 +63,24 @@ L'adresse, le token et le topic ntfy saisis dans l'app ne sont jamais publiés.
    - `NTFY_TOPIC` = le nom du topic choisi à l'étape 1
 3. **Actions → Surveillance positions → Run workflow**, coche « Envoyer une notification de test ». Tu dois recevoir la notif sur ton téléphone.
 
-C'est tout : le workflow tourne ensuite toutes les ~5 minutes. GitHub peut retarder certaines exécutions de quelques minutes aux heures chargées.
+4. Déclenchement toutes les 5 min par **cron-job.org** (le cron intégré de GitHub saute des exécutions pendant des heures, inutilisable pour des alertes) :
+   1. Crée un token GitHub : **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**
+      - *Repository access* : **Only select repositories** → ce dépôt uniquement
+      - *Permissions* → *Repository permissions* → **Actions : Read and write** (rien d'autre)
+   2. Sur [cron-job.org](https://cron-job.org) (compte gratuit) → **Create cronjob** :
+      - *URL* : `https://api.github.com/repos/<toi>/<depot>/actions/workflows/monitor.yml/dispatches`
+      - *Execution schedule* : every 5 minutes
+      - onglet *Advanced* → *Request method* : **POST**
+      - *Headers* :
+        - `Authorization` : `Bearer <le token>`
+        - `Accept` : `application/vnd.github+json`
+        - `X-GitHub-Api-Version` : `2022-11-28`
+        - `Content-Type` : `application/json`
+      - *Request body* : `{"ref":"main"}`
+      - active la notification par e-mail en cas d'échec
+   3. **Test run** : la réponse doit être `204 No Content`, et une exécution « workflow_dispatch » apparaît dans l'onglet Actions.
 
-> ⚠️ GitHub désactive les workflows planifiés d'un dépôt public après **60 jours sans commit**. Tu reçois un e-mail avant ; il suffit de cliquer « Enable workflow » dans l'onglet Actions (ou de faire un commit).
+> ⚠️ Le token expire à la date choisie à sa création : pense à le renouveler (et à le remplacer dans cron-job.org) avant. Une erreur 401 dans cron-job.org = token expiré.
 
 ## Réglages (`config.json`)
 
