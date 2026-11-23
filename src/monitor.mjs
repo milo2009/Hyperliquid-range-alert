@@ -376,7 +376,9 @@ async function main() {
   if (quiet) console.log('(heures calmes : seules les nouvelles alertes 🚨 sont envoyées)');
 
   const next = { items: {}, failures: errors.length ? (state.failures || 0) + 1 : 0, failureNotified: state.failureNotified };
-  for (const it of items) {
+  for (const raw of items) {
+    // notifyNear: false → « proche du bord » ne notifie pas : traité comme ok pour les notifs (l'affichage garde 🟠).
+    const it = raw.level === 'near' && cfg.notifyNear === false ? { ...raw, level: 'ok' } : raw;
     const prev = state.items[it.key];
     const reason = decide(it, prev, now, cfg);
     if (reason && quiet && !allowedDuringQuiet(it, reason)) {

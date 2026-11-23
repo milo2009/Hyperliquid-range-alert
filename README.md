@@ -69,7 +69,7 @@ L'adresse, le token et le topic ntfy saisis dans l'app ne sont jamais publiés.
       - *Permissions* → *Repository permissions* → **Actions : Read and write** (rien d'autre)
    2. Sur [cron-job.org](https://cron-job.org) (compte gratuit) → **Create cronjob** :
       - *URL* : `https://api.github.com/repos/<toi>/<depot>/actions/workflows/monitor.yml/dispatches`
-      - *Execution schedule* : every 5 minutes
+      - *Execution schedule* : every hour (ou every 5 minutes pour une surveillance plus serrée)
       - onglet *Advanced* → *Request method* : **POST**
       - *Headers* :
         - `Authorization` : `Bearer <le token>`
@@ -86,7 +86,9 @@ L'adresse, le token et le topic ntfy saisis dans l'app ne sont jamais publiés.
 
 | Clé | Rôle | Défaut |
 |---|---|---|
-| `lp.nearEdgePct` | alerte « proche du bord » si le prix est à moins de X % d'une borne | `3` |
+| `notifyNear` | `false` = notifier seulement les 🚨 (sortie de range, liquidation proche) ; les 🟠 restent visibles sur le tableau de bord | `true` |
+| `notifyAfterConsecutiveFailures` | alerte « Surveillance en échec » après N exécutions ratées d'affilée | `3` |
+| `lp.nearEdgePct` | seuil 🟠 « proche du bord » : prix à moins de X % d'une borne | `3` |
 | `lp.positionManagers[].extraTokenIds` | IDs de positions à suivre même si le NFT n'est pas dans ton wallet (ex. stakée dans une farm) | `[]` |
 | `lp.positionManagers[].ignoreTokenIds` | IDs à ignorer | `[]` |
 | `perps.liqWarnPct` / `perps.liqDangerPct` | distance au prix de liquidation pour ⚠️ / 🚨 | `15` / `7` |

@@ -2,8 +2,9 @@
   "address": null,
   "dashboardUrl": "https://milo2009.github.io/Hyperliquid-range-alert/",
 
+  "notifyNear": false,
   "remindEveryHours": 4,
-  "notifyAfterConsecutiveFailures": 3,
+  "notifyAfterConsecutiveFailures": 2,
 
   "quietHours": {
     "enabled": true,
