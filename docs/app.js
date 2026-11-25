@@ -224,6 +224,34 @@ async function loadPerps(cfg, owner) {
   return { positions, accountValue: Number(st.marginSummary?.accountValue || 0) };
 }
 
+// Positions saisies à la main (ex. Variational Omni, sans API publique) : prix = mid Hyperliquid.
+async function loadManual(cfg) {
+  const mc = cfg.manual || {};
+  const list = (mc.positions || []).filter((p) => p.coin && Number(p.entry) > 0);
+  if (!list.length) return [];
+  const nearPct = mc.nearEntryPct ?? 3;
+  const warn = cfg.perps?.liqWarnPct ?? 15;
+  const danger = cfg.perps?.liqDangerPct ?? 7;
+  const mids = await hl({ type: 'allMids' });
+  return list.map((p) => {
+    const coin = String(p.coin).toUpperCase();
+    const short = String(p.side).toLowerCase() === 'short';
+    const mark = Number(mids[coin]);
+    const entry = Number(p.entry);
+    const size = Math.abs(Number(p.size) || 0);
+    const liq = Number(p.liq) > 0 ? Number(p.liq) : null;
+    const toEntry = ((short ? entry - mark : mark - entry) / mark) * 100;
+    const dist = liq ? (Math.abs(mark - liq) / mark) * 100 : null;
+    let level = !Number.isFinite(mark) ? 'near' : toEntry <= 0 ? 'out' : toEntry <= nearPct ? 'near' : 'ok';
+    if (dist != null && dist <= danger) level = 'out';
+    else if (dist != null && dist <= warn && level === 'ok') level = 'near';
+    return {
+      venue: p.venue || 'Manuel', url: p.url, coin, short, size, entry, liq, dist, mark, toEntry, nearPct, level,
+      value: mark * size, pnl: (short ? entry - mark : mark - entry) * size,
+    };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // GitHub (config.json)
 
@@ -362,24 +390,82 @@ function perpCard(p) {
     </article>`;
 }
 
-function summary(lps, perps) {
+const ENTRY_STATUS = {
+  ok: { label: 'Loin de l’entrée', icon: '✓' },
+  near: { label: 'Proche de l’entrée', icon: '!' },
+  out: { label: 'Entrée atteinte', icon: '✕' },
+};
+
+// Barre : zone sûre (côté profit) jusqu'au prix d'entrée, bande « proche » avant l'entrée, marqueur au prix.
+function entryBar(p) {
+  const lo = Math.min(p.mark, p.entry) * 0.9;
+  const hi = Math.max(p.mark, p.entry) * 1.1;
+  const pos = (v) => Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100));
+  const e = pos(p.entry);
+  const nearW = Math.abs(pos(p.entry * (1 + (p.short ? -1 : 1) * p.nearPct / 100)) - e);
+  const safe = p.short ? { l: 0, w: e } : { l: e, w: 100 - e };
+  const near = p.short ? { l: e - nearW, w: nearW } : { l: e, w: nearW };
+  const price = ['Prix', `<b>${esc(fmtPrice(p.mark))}</b>`];
+  const entry = ['Entrée', esc(fmtPrice(p.entry))];
+  const [left, right] = p.mark <= p.entry ? [price, entry] : [entry, price];
+  const labels = [`<span><small>${left[0]}</small>${left[1]}</span>`, `<span class="right"><small>${right[0]}</small>${right[1]}</span>`];
+  return `
+    <div class="range" role="img" aria-label="Prix ${esc(fmtPrice(p.mark))}, entrée ${esc(fmtPrice(p.entry))}">
+      <div class="track"></div>
+      <div class="inrange" data-l="${safe.l}" data-w="${safe.w}"></div>
+      <div class="nearzone" data-l="${near.l}" data-w="${near.w}"></div>
+      <div class="marker ${p.level}" data-l="${pos(p.mark)}"></div>
+    </div>
+    <div class="range-labels">${labels.join('')}</div>`;
+}
+
+function manualCard(p) {
+  const detail = p.toEntry > 0
+    ? `Encore ${fmtPct(p.toEntry)} de ${p.short ? 'hausse' : 'baisse'} avant le prix d’entrée`
+    : `Prix d’entrée atteint : le prix est ${p.short ? 'au-dessus' : 'en dessous'} de l’entrée`;
+  return `
+    <article class="card">
+      <header class="card-head">
+        <div>
+          <h3>${esc(p.coin)} <span class="muted">${p.short ? 'Short' : 'Long'}</span></h3>
+          <p class="muted small">${esc(p.venue)} · saisie manuelle</p>
+        </div>
+        ${badge(p.level, ENTRY_STATUS)}
+      </header>
+      ${entryBar(p)}
+      <p class="detail">${esc(detail)}</p>
+      <dl class="kv">
+        <div><dt>Prix (Hyperliquid)</dt><dd>${esc(fmtPrice(p.mark))}</dd></div>
+        <div><dt>Entrée</dt><dd>${esc(fmtPrice(p.entry))}</dd></div>
+        <div><dt>Taille</dt><dd>${esc(nf(8).format(p.size))} ${esc(p.coin)}</dd></div>
+        <div><dt>Valeur</dt><dd>${esc(fmtUsd(p.value))}</dd></div>
+        <div><dt>Liquidation</dt><dd>${p.liq ? `${esc(fmtPrice(p.liq))} <span class="muted">(${esc(fmtPct(p.dist))})</span>` : '—'}</dd></div>
+        <div><dt>PnL estimé</dt><dd class="${p.pnl >= 0 ? 'pos' : 'neg'}">${esc(fmtUsd(p.pnl))}</dd></div>
+      </dl>
+      ${p.url ? `<a class="btn ghost" href="${esc(p.url)}" target="_blank" rel="noopener">Ouvrir ${esc(p.venue)} ↗</a>` : ''}
+    </article>`;
+}
+
+function summary(lps, perps, manual) {
   const total = lps.reduce((a, p) => a + p.value, 0);
   const fees = lps.reduce((a, p) => a + p.feesValue, 0);
   const inRange = lps.filter((p) => p.level !== 'out').length;
   const prices = [...new Map(lps.map((p) => [`${p.sym0}/${p.sym1}`, p])).values()];
-  const worst = [...lps, ...perps.positions].reduce((w, p) => (['ok', 'near', 'out'].indexOf(p.level) > ['ok', 'near', 'out'].indexOf(w) ? p.level : w), 'ok');
-  const headline = { ok: 'Tout est dans la range', near: 'Une position approche du bord', out: 'Action requise' }[worst];
+  const coins = [...new Map(manual.map((p) => [p.coin, p])).values()];
+  const worst = [...lps, ...perps.positions, ...manual].reduce((w, p) => (['ok', 'near', 'out'].indexOf(p.level) > ['ok', 'near', 'out'].indexOf(w) ? p.level : w), 'ok');
+  const headline = { ok: 'Tout est sous contrôle', near: 'Une position approche d’un seuil', out: 'Action requise' }[worst];
   return `
     <section class="summary">
       <div class="hero ${worst}">
         <span class="hero-icon" aria-hidden="true">${STATUS[worst].icon}</span>
         <div><p class="hero-title">${esc(headline)}</p>
-        <p class="muted small">${lps.length ? `${inRange}/${lps.length} LP dans la range` : 'Aucune LP'}${perps.positions.length ? ` · ${perps.positions.length} perp(s)` : ''}</p></div>
+        <p class="muted small">${lps.length ? `${inRange}/${lps.length} LP dans la range` : 'Aucune LP'}${perps.positions.length ? ` · ${perps.positions.length} perp(s)` : ''}${manual.length ? ` · ${manual.length} autre(s)` : ''}</p></div>
       </div>
       <div class="tiles">
         ${prices.map((p) => `<div class="tile"><small>${esc(p.sym0)}</small><b>${esc(fmtPrice(p.price))}</b><small>${esc(p.sym1)}</small></div>`).join('')}
-        <div class="tile"><small>Valeur LP</small><b>${esc(fmtUsd(total))}</b></div>
-        <div class="tile"><small>Frais à réclamer</small><b>${esc(fmtUsd(fees))}</b></div>
+        ${coins.map((p) => `<div class="tile"><small>${esc(p.coin)}</small><b>${esc(fmtPrice(p.mark))}</b><small>USD</small></div>`).join('')}
+        ${lps.length ? `<div class="tile"><small>Valeur LP</small><b>${esc(fmtUsd(total))}</b></div>
+        <div class="tile"><small>Frais à réclamer</small><b>${esc(fmtUsd(fees))}</b></div>` : ''}
         ${perps.accountValue ? `<div class="tile"><small>Compte perps</small><b>${esc(fmtUsd(perps.accountValue))}</b></div>` : ''}
       </div>
     </section>`;
@@ -400,13 +486,14 @@ async function refresh() {
   $('#refresh').classList.add('spin');
   try {
     if (!config) config = await loadConfig();
-    const [lps, perps] = await Promise.all([loadLps(config, owner), loadPerps(config, owner)]);
+    const [lps, perps, manual] = await Promise.all([loadLps(config, owner), loadPerps(config, owner), loadManual(config)]);
     const order = { out: 0, near: 1, ok: 2 };
     lps.sort((a, b) => order[a.level] - order[b.level]);
-    view.innerHTML = summary(lps, perps)
+    view.innerHTML = summary(lps, perps, manual)
+      + (manual.length ? `<h2>Autres plateformes</h2>${manual.map(manualCard).join('')}` : '')
       + (lps.length ? `<h2>Liquidité concentrée</h2>${lps.map(lpCard).join('')}` : '')
       + (perps.positions.length ? `<h2>Perps</h2>${perps.positions.map(perpCard).join('')}` : '')
-      + (!lps.length && !perps.positions.length ? '<div class="empty"><p>Aucune position ouverte détectée.</p></div>' : '');
+      + (!lps.length && !perps.positions.length && !manual.length ? '<div class="empty"><p>Aucune position ouverte détectée.</p></div>' : '');
     applyGeometry(view);
     $('#updated').textContent = `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
   } catch (e) {
@@ -433,6 +520,39 @@ const rangeRow = (coin = '', min = '', max = '') => `
     <button type="button" class="icon-btn r-del" aria-label="Supprimer">✕</button>
   </div>`;
 
+const manualRow = (p = {}) => `
+  <div class="manual-row" data-url="${esc(p.url ?? '')}">
+    <input class="m-venue" placeholder="Plateforme" value="${esc(p.venue ?? '')}" aria-label="Plateforme">
+    <input class="m-coin" placeholder="BTC" value="${esc(p.coin ?? '')}" aria-label="Coin">
+    <select class="m-side" aria-label="Sens">
+      <option value="short"${p.side === 'long' ? '' : ' selected'}>Short</option>
+      <option value="long"${p.side === 'long' ? ' selected' : ''}>Long</option>
+    </select>
+    <input class="m-entry" type="number" step="any" inputmode="decimal" placeholder="Prix d’entrée" value="${esc(p.entry ?? '')}" aria-label="Prix d’entrée">
+    <input class="m-size" type="number" step="any" inputmode="decimal" placeholder="Taille" value="${esc(p.size ?? '')}" aria-label="Taille">
+    <input class="m-liq" type="number" step="any" inputmode="decimal" placeholder="Liquidation" value="${esc(p.liq ?? '')}" aria-label="Prix de liquidation">
+    <button type="button" class="icon-btn m-del" aria-label="Supprimer">✕</button>
+  </div>`;
+
+function readManual() {
+  const positions = [];
+  for (const row of document.querySelectorAll('.manual-row')) {
+    const coin = $('.m-coin', row).value.trim().toUpperCase();
+    const entry = $('.m-entry', row).value;
+    if (!coin && entry === '') continue;
+    if (!coin || !(Number(entry) > 0)) throw new Error('Position manuelle : coin et prix d’entrée obligatoires.');
+    const venue = $('.m-venue', row).value.trim() || 'Manuel';
+    const size = $('.m-size', row).value;
+    const liq = $('.m-liq', row).value;
+    const url = row.dataset.url || (/variational/i.test(venue) ? 'https://omni.variational.io/portfolio' : '');
+    positions.push({
+      venue, coin, side: $('.m-side', row).value, ...(size !== '' ? { size: Number(size) } : {}), entry: Number(entry),
+      ...(liq !== '' ? { liq: Number(liq) } : {}), ...(url ? { url } : {}),
+    });
+  }
+  return positions;
+}
+
 function fillSettings(cfg) {
   const f = $('#settings-form');
   const m = cfg.lp?.positionManagers?.[0] || {};
@@ -447,6 +567,8 @@ function fillSettings(cfg) {
   f.extraIds.value = (m.extraTokenIds || []).join(', ');
   f.ignoreIds.value = (m.ignoreTokenIds || []).join(', ');
   renderRanges(cfg.perps?.ranges);
+  f.nearEntryPct.value = cfg.manual?.nearEntryPct ?? 3;
+  $('#manuals').innerHTML = (cfg.manual?.positions || []).map(manualRow).join('');
 }
 
 function readSettings(base) {
@@ -478,6 +600,7 @@ function readSettings(base) {
     if (ranges[coin].min != null && ranges[coin].max != null && ranges[coin].min >= ranges[coin].max) throw new Error(`${coin} : min doit être inférieur à max.`);
   }
   cfg.perps.ranges = ranges;
+  cfg.manual = { ...(cfg.manual || {}), nearEntryPct: num(f.nearEntryPct, 'Alerte proche de l’entrée', 0, 50), positions: readManual() };
   if (cfg.lp.positionManagers?.[0]) {
     cfg.lp.positionManagers[0].extraTokenIds = csvIds(f.extraIds.value);
     cfg.lp.positionManagers[0].ignoreTokenIds = csvIds(f.ignoreIds.value);
@@ -522,6 +645,8 @@ function initSettings() {
 
   $('#add-range').addEventListener('click', () => $('#ranges').insertAdjacentHTML('beforeend', rangeRow()));
   $('#ranges').addEventListener('click', (e) => e.target.closest('.r-del')?.closest('.range-row').remove());
+  $('#add-manual').addEventListener('click', () => $('#manuals').insertAdjacentHTML('beforeend', manualRow()));
+  $('#manuals').addEventListener('click', (e) => e.target.closest('.m-del')?.closest('.manual-row').remove());
 
   $('#settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();

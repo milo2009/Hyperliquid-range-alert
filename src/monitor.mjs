@@ -261,6 +261,58 @@ async function checkPerps(cfg, address) {
 }
 
 // ---------------------------------------------------------------------------
+// Positions saisies à la main (plateformes sans API publique, ex. Variational Omni).
+// Le prix vient des mids Hyperliquid ; alerte quand il atteint le prix d'entrée
+// (short : prix >= entrée, long : prix <= entrée), et si la liquidation approche.
+
+async function checkManual(cfg) {
+  const mc = cfg.manual || {};
+  const list = (mc.positions || []).filter((p) => p.coin && Number(p.entry) > 0);
+  if (!list.length) return [];
+  const nearPct = mc.nearEntryPct ?? 3;
+  const warnPct = cfg.perps?.liqWarnPct ?? 15;
+  const dangerPct = cfg.perps?.liqDangerPct ?? 7;
+  const mids = await hlInfo({ type: 'allMids' });
+
+  return list.map((p) => {
+    const coin = String(p.coin).toUpperCase();
+    const venue = p.venue || 'Manuel';
+    const short = String(p.side).toLowerCase() === 'short';
+    const side = short ? 'SHORT' : 'LONG';
+    const mark = Number(mids[coin]);
+    if (!Number.isFinite(mark)) throw new Error(`Prix ${coin} introuvable sur Hyperliquid`);
+    const entry = Number(p.entry);
+    const size = Math.abs(Number(p.size) || 0);
+    const liq = Number(p.liq) > 0 ? Number(p.liq) : null;
+
+    // % de mouvement restant avant d'atteindre l'entrée (<= 0 : atteinte ou dépassée).
+    const toEntry = ((short ? entry - mark : mark - entry) / mark) * 100;
+    let level = toEntry <= 0 ? 'out' : toEntry <= nearPct ? 'near' : 'ok';
+    const parts = [toEntry <= 0
+      ? `prix d'entrée ${fmtPrice(entry)} ATTEINT (${short ? 'au-dessus' : 'en dessous'})`
+      : `prix d'entrée ${fmtPrice(entry)} à ${fmtPct(toEntry)}`];
+    if (liq) {
+      const dist = (Math.abs(mark - liq) / mark) * 100;
+      if (dist <= dangerPct) level = 'out';
+      else if (dist <= warnPct && level === 'ok') level = 'near';
+      parts.push(`liquidation à ${fmtPct(dist)} (${fmtPrice(liq)})`);
+    }
+    const pnl = (short ? entry - mark : mark - entry) * size;
+
+    return {
+      key: `manual:${venue}:${coin}:${side}`,
+      kind: 'manual',
+      level,
+      label: `${coin} ${side} ${venue}`,
+      source: `${venue} (saisie manuelle, prix Hyperliquid)`,
+      detail: parts.join(', '),
+      line: `Prix ${fmtPrice(mark)} | entrée ${fmtPrice(entry)}${size ? ` | PnL estimé ${pnl.toFixed(2)} $` : ''}`,
+      click: p.url,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Notifications
 
 // actions : boutons ntfy (max 3), ex. [{ label: 'HyperSwap', url: 'https://…' }]
@@ -295,6 +347,11 @@ const TEXT = {
     out: { title: '🚨 Liquidation proche', priority: 5 },
     near: { title: '⚠️ Liquidation à surveiller', priority: 4 },
     ok: { title: '✅ Position perp sécurisée', priority: 3 },
+  },
+  manual: {
+    out: { title: '🚨 Prix d’entrée atteint', priority: 5 },
+    near: { title: '⚠️ Proche du prix d’entrée', priority: 4 },
+    ok: { title: '✅ Prix repassé du bon côté de l’entrée', priority: 3 },
   },
 };
 
@@ -355,12 +412,13 @@ async function main() {
   const now = Date.now();
 
   // Les deux sources sont indépendantes : une panne de l'une ne bloque pas l'autre.
-  const sources = await Promise.allSettled([checkLps(cfg, address), checkPerps(cfg, address)]);
+  const names = ['LP', 'Perps', 'Positions manuelles'];
+  const sources = await Promise.allSettled([checkLps(cfg, address), checkPerps(cfg, address), checkManual(cfg)]);
   const items = [];
   const errors = [];
   for (const [i, s] of sources.entries()) {
     if (s.status === 'fulfilled') items.push(...s.value);
-    else errors.push(`${i === 0 ? 'LP' : 'Perps'}: ${s.reason.message}`);
+    else errors.push(`${names[i]}: ${s.reason.message}`);
   }
 
   for (const it of items) {

@@ -58,6 +58,16 @@
         </fieldset>
 
         <fieldset>
+          <legend>Autres plateformes (saisie manuelle)</legend>
+          <p class="small muted">Positions sans API publique (ex. Variational Omni). Alerte 🚨 quand le prix Hyperliquid atteint le prix d’entrée.</p>
+          <label>Alerte « proche » quand le prix est à moins de
+            <span class="input-unit"><input name="nearEntryPct" type="number" step="0.5" min="0" max="50" inputmode="decimal"><span>%</span></span>
+          </label>
+          <div id="manuals"></div>
+          <button type="button" id="add-manual" class="btn ghost small-btn">+ Ajouter une position</button>
+        </fieldset>
+
+        <fieldset>
           <legend>Rythme</legend>
           <label>Rappel tant que c’est hors range, toutes les
             <span class="input-unit"><input name="remindEveryHours" type="number" step="1" min="0" max="168" inputmode="numeric"><span>h</span></span>

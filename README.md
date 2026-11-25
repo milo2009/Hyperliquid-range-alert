@@ -3,7 +3,8 @@
 Notification sur ton téléphone (via [ntfy](https://ntfy.sh)) quand :
 
 - une **LP concentrée** HyperSwap V3 (HyperEVM) sort de sa range, ou s'approche d'un bord (défaut : à moins de 3 %) ;
-- une **position perp** Hyperliquid s'approche de son prix de liquidation (défaut : alerte à 15 %, urgent à 7 %), ou sort d'une range de prix que tu définis.
+- une **position perp** Hyperliquid s'approche de son prix de liquidation (défaut : alerte à 15 %, urgent à 7 %), ou sort d'une range de prix que tu définis ;
+- une **position sur une autre plateforme** (ex. Variational Omni, sans API publique) voit le prix atteindre son **prix d'entrée** (short : le prix remonte à l'entrée ; long : il redescend à l'entrée). Ces positions sont saisies à la main (voir `manual` ci-dessous) ; le prix utilisé est celui d'Hyperliquid, qui peut différer de quelques dollars du mark Variational.
 
 Le script est **en lecture seule** : il n'utilise que ton adresse publique, jamais de clé privée, et ne touche pas à Rabby.
 Les positions sont détectées automatiquement (NFT LP détenus par l'adresse + positions perp ouvertes), donc les nouvelles positions sont suivies sans rien modifier.
@@ -93,6 +94,8 @@ L'adresse, le token et le topic ntfy saisis dans l'app ne sont jamais publiés.
 | `lp.positionManagers[].ignoreTokenIds` | IDs à ignorer | `[]` |
 | `perps.liqWarnPct` / `perps.liqDangerPct` | distance au prix de liquidation pour ⚠️ / 🚨 | `15` / `7` |
 | `perps.ranges` | range de prix perso par coin, ex. `{"HYPE": {"min": 50, "max": 70}}` | `{}` |
+| `manual.positions` | positions saisies à la main : `venue`, `coin`, `side` (`short`/`long`), `entry`, et en option `size`, `liq`, `url`. À mettre à jour si tu modifies la position | `[]` |
+| `manual.nearEntryPct` | seuil 🟠 « proche de l'entrée » (affiché sur le tableau de bord ; notifié seulement si `notifyNear` vaut `true`) | `3` |
 | `remindEveryHours` | rappel tant que c'est hors range (`0` = jamais) | `4` |
 | `quietHours` | heures calmes : `enabled`, `start`, `end`, `timezone` | 23:00 → 08:00 Europe/Paris |
 | `dashboardUrl` | lien « Tableau de bord » dans les notifs | URL GitHub Pages |
