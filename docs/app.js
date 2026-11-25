@@ -4,7 +4,7 @@
 
 const RPC = 'https://rpc.hyperliquid.xyz/evm';
 const HL_API = 'https://api.hyperliquid.xyz/info';
-const LS = { address: 'ra.address', token: 'ra.ghToken', repo: 'ra.repo', topic: 'ra.ntfyTopic' };
+const LS = { address: 'ra.address', token: 'ra.ghToken', repo: 'ra.repo', topic: 'ra.ntfyTopic', site: 'ra.site' };
 const DEFAULT_REPO = 'milo2009/Hyperliquid-range-alert';
 const MAX_U128 = (1n << 128n) - 1n;
 const SEL = {
@@ -471,6 +471,29 @@ function summary(lps, perps, manual) {
     </section>`;
 }
 
+function siteTabs(groups) {
+  const saved = store.get(LS.site);
+  const cur = groups.some((g) => g.name === saved) ? saved : groups[0].name;
+  const tabs = groups.map((g, i) => `
+    <button type="button" role="tab" id="site-tab-${i}" aria-controls="site-panel-${i}" aria-selected="${g.name === cur}" tabindex="${g.name === cur ? 0 : -1}" data-site="${esc(g.name)}">
+      ${esc(g.name)}<span class="count">${g.cards.length}</span>${g.level !== 'ok' ? `<span class="dot ${g.level}" aria-label="${esc(STATUS[g.level].label)}">${STATUS[g.level].icon}</span>` : ''}
+    </button>`).join('');
+  const panels = groups.map((g, i) => `
+    <div role="tabpanel" id="site-panel-${i}" aria-labelledby="site-tab-${i}"${g.name === cur ? '' : ' hidden'}>${g.cards.join('')}</div>`).join('');
+  return `<div class="site-tabs" role="tablist" aria-label="Plateformes">${tabs}</div>${panels}`;
+}
+
+function selectSite(tab) {
+  const list = tab.closest('[role="tablist"]');
+  for (const t of list.querySelectorAll('[role="tab"]')) {
+    const on = t === tab;
+    t.setAttribute('aria-selected', on);
+    t.tabIndex = on ? 0 : -1;
+    $(`#${t.getAttribute('aria-controls')}`).hidden = !on;
+  }
+  store.set(LS.site, tab.dataset.site);
+}
+
 let config = null;
 let refreshing = false;
 
@@ -489,11 +512,19 @@ async function refresh() {
     const [lps, perps, manual] = await Promise.all([loadLps(config, owner), loadPerps(config, owner), loadManual(config)]);
     const order = { out: 0, near: 1, ok: 2 };
     lps.sort((a, b) => order[a.level] - order[b.level]);
+    // Un onglet par plateforme, dans l'ordre : DEX LP (HyperSwap…), Hyperliquid, puis les saisies manuelles.
+    const groups = [];
+    const add = (name, level, html) => {
+      let g = groups.find((x) => x.name === name);
+      if (!g) groups.push(g = { name, level: 'ok', cards: [] });
+      g.cards.push(html);
+      if (order[level] < order[g.level]) g.level = level;
+    };
+    lps.forEach((p) => add(p.dex.split(' ')[0], p.level, lpCard(p)));
+    perps.positions.forEach((p) => add('Hyperliquid', p.level, perpCard(p)));
+    manual.forEach((p) => add(p.venue, p.level, manualCard(p)));
     view.innerHTML = summary(lps, perps, manual)
-      + (manual.length ? `<h2>Autres plateformes</h2>${manual.map(manualCard).join('')}` : '')
-      + (lps.length ? `<h2>Liquidité concentrée</h2>${lps.map(lpCard).join('')}` : '')
-      + (perps.positions.length ? `<h2>Perps</h2>${perps.positions.map(perpCard).join('')}` : '')
-      + (!lps.length && !perps.positions.length && !manual.length ? '<div class="empty"><p>Aucune position ouverte détectée.</p></div>' : '');
+      + (groups.length ? siteTabs(groups) : '<div class="empty"><p>Aucune position ouverte détectée.</p></div>');
     applyGeometry(view);
     $('#updated').textContent = `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
   } catch (e) {
@@ -696,6 +727,18 @@ async function checkUpdate() {
 
 document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
 $('#refresh').addEventListener('click', () => { checkUpdate(); refresh(); });
+$('#positions').addEventListener('click', (e) => {
+  const tab = e.target.closest('[role="tab"]');
+  if (tab) selectSite(tab);
+});
+$('#positions').addEventListener('keydown', (e) => {
+  const tab = e.target.closest('[role="tab"]');
+  if (!tab || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+  const tabs = [...tab.parentElement.children];
+  const next = tabs[(tabs.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+  selectSite(next);
+  next.focus();
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   checkUpdate();
