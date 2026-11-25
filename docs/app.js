@@ -682,9 +682,25 @@ function show(tab) {
   }
 }
 
+// Mise à jour auto : l'app installée garde la page en mémoire, donc on recharge si un fichier a été redéployé.
+// Empreinte de départ = version en cache (celle qui tourne) ; comparaison avec la version réseau.
+const ASSETS = ['./', 'app.js', 'style.css'];
+const assetsTag = (cache) => Promise.all(ASSETS.map((u) => fetch(u, { cache })
+  .then((r) => r.headers.get('etag') || r.headers.get('last-modified') || '')))
+  .then((t) => t.join('|')).catch(() => null);
+const runningTag = assetsTag('force-cache');
+async function checkUpdate() {
+  const [before, now] = await Promise.all([runningTag, assetsTag('reload')]);
+  if (before && now && before !== now) location.reload();
+}
+
 document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
-$('#refresh').addEventListener('click', refresh);
-document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && refresh());
+$('#refresh').addEventListener('click', () => { checkUpdate(); refresh(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  checkUpdate();
+  refresh();
+});
 setInterval(() => document.visibilityState === 'visible' && !$('#positions').hidden && refresh(), 60_000);
 
 // Configuration rapide par lien : …/#address=0x… (le fragment # ne quitte jamais le téléphone).
