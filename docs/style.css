@@ -216,3 +216,4 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 }
 .tabbar button span { font-size: 1.2rem; }
 .tabbar button[aria-current="page"] { color: var(--accent); }
+[hidden] { display: none !important; }

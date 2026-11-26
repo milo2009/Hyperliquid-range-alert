@@ -2,6 +2,8 @@
 // Lecture seule côté blockchain : seule l'adresse publique est utilisée.
 // Le token GitHub (optionnel) sert uniquement à enregistrer config.json dans le dépôt.
 
+import { parseCron } from './cron.js';
+
 const RPC = 'https://rpc.hyperliquid.xyz/evm';
 const HL_API = 'https://api.hyperliquid.xyz/info';
 const LS = { address: 'ra.address', token: 'ra.ghToken', repo: 'ra.repo', topic: 'ra.ntfyTopic', site: 'ra.site' };
@@ -588,6 +590,11 @@ function fillSettings(cfg) {
   const f = $('#settings-form');
   const m = cfg.lp?.positionManagers?.[0] || {};
   f.nearEdgePct.value = cfg.lp?.nearEdgePct ?? 3;
+  const cron = cfg.schedule?.cron || '0 * * * *';
+  const preset = [...f.schedulePreset.options].some((o) => o.value === cron);
+  f.schedulePreset.value = preset ? cron : 'custom';
+  f.scheduleCron.value = cron;
+  syncCronField();
   f.remindEveryHours.value = cfg.remindEveryHours ?? 4;
   f.quietEnabled.checked = !!cfg.quietHours?.enabled;
   f.quietStart.value = cfg.quietHours?.start ?? '23:00';
@@ -612,6 +619,10 @@ function readSettings(base) {
   const cfg = structuredClone(base);
   cfg.lp ??= {};
   cfg.lp.nearEdgePct = num(f.nearEdgePct, 'Alerte proche du bord', 0, 50);
+  const cron = (f.schedulePreset.value === 'custom' ? f.scheduleCron.value : f.schedulePreset.value).trim().replace(/\s+/g, ' ');
+  parseCron(cron); // lève une erreur lisible si l'expression est invalide
+  cfg.schedule = { ...(cfg.schedule || {}), cron };
+  cfg.schedule.timezone ??= cfg.quietHours?.timezone || 'Europe/Paris';
   cfg.remindEveryHours = num(f.remindEveryHours, 'Rappel', 0, 168);
   cfg.quietHours = { ...(cfg.quietHours || {}), enabled: f.quietEnabled.checked, start: f.quietStart.value || '23:00', end: f.quietEnd.value || '08:00' };
   cfg.quietHours.timezone ??= 'Europe/Paris';
@@ -637,6 +648,14 @@ function readSettings(base) {
     cfg.lp.positionManagers[0].ignoreTokenIds = csvIds(f.ignoreIds.value);
   }
   return cfg;
+}
+
+// Le champ cron libre n'est visible qu'avec « personnalisé ».
+function syncCronField() {
+  const f = $('#settings-form');
+  const custom = f.schedulePreset.value === 'custom';
+  $('#cron-custom').hidden = !custom;
+  if (!custom) f.scheduleCron.value = f.schedulePreset.value;
 }
 
 function setMsg(el, text, kind = '') {
@@ -674,6 +693,8 @@ function initSettings() {
     setMsg($('#device-msg'), r?.ok ? 'Notification envoyée.' : 'Échec de l’envoi.', r?.ok ? 'ok' : 'err');
   });
 
+  $('#settings-form').schedulePreset.addEventListener('change', syncCronField);
+  syncCronField();
   $('#add-range').addEventListener('click', () => $('#ranges').insertAdjacentHTML('beforeend', rangeRow()));
   $('#ranges').addEventListener('click', (e) => e.target.closest('.r-del')?.closest('.range-row').remove());
   $('#add-manual').addEventListener('click', () => $('#manuals').insertAdjacentHTML('beforeend', manualRow()));
@@ -688,9 +709,11 @@ function initSettings() {
       setMsg(msg, 'Enregistrement…');
       const fresh = await loadConfig(); // repart de la version en ligne pour ne rien écraser
       const next = readSettings(fresh);
+      const cronChanged = next.schedule?.cron !== fresh.schedule?.cron;
       const url = await saveConfig(next);
       config = next;
-      setMsg(msg, `Enregistré ✓ — appliqué au prochain passage (≤ 15 min). <a href="${esc(url)}" target="_blank" rel="noopener">Voir le commit</a>`, 'ok');
+      const runs = `https://github.com/${detectRepo()}/actions/workflows/schedule.yml`;
+      setMsg(msg, `Enregistré ✓ — appliqué au prochain passage.${cronChanged ? ` Nouveau rythme envoyé à cron-job.org (<a href="${esc(runs)}" target="_blank" rel="noopener">suivi</a>).` : ''} <a href="${esc(url)}" target="_blank" rel="noopener">Voir le commit</a>`, 'ok');
     } catch (err) {
       setMsg(msg, esc(err.message), 'err');
     } finally {
@@ -715,7 +738,7 @@ function show(tab) {
 
 // Mise à jour auto : l'app installée garde la page en mémoire, donc on recharge si un fichier a été redéployé.
 // Empreinte de départ = version en cache (celle qui tourne) ; comparaison avec la version réseau.
-const ASSETS = ['./', 'app.js', 'style.css'];
+const ASSETS = ['./', 'app.js', 'cron.js', 'style.css'];
 const assetsTag = (cache) => Promise.all(ASSETS.map((u) => fetch(u, { cache })
   .then((r) => r.headers.get('etag') || r.headers.get('last-modified') || '')))
   .then((t) => t.join('|')).catch(() => null);

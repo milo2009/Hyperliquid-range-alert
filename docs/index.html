@@ -69,6 +69,22 @@
 
         <fieldset>
           <legend>Rythme</legend>
+          <label>Vérifier les positions
+            <select name="schedulePreset">
+              <option value="* * * * *">chaque minute</option>
+              <option value="*/2 * * * *">toutes les 2 min</option>
+              <option value="*/5 * * * *">toutes les 5 min</option>
+              <option value="*/10 * * * *">toutes les 10 min</option>
+              <option value="*/15 * * * *">toutes les 15 min</option>
+              <option value="*/30 * * * *">toutes les 30 min</option>
+              <option value="0 * * * *" selected>toutes les heures</option>
+              <option value="custom">personnalisé (cron)…</option>
+            </select>
+          </label>
+          <label id="cron-custom">Expression cron (minute heure jour mois jour-semaine)
+            <input name="scheduleCron" placeholder="*/5 8-23 * * *" autocomplete="off" spellcheck="false" inputmode="text">
+          </label>
+          <p class="small muted">Appliqué sur cron-job.org environ 1 min après l’enregistrement. Fuseau : heure de Paris.</p>
           <label>Rappel tant que c’est hors range, toutes les
             <span class="input-unit"><input name="remindEveryHours" type="number" step="1" min="0" max="168" inputmode="numeric"><span>h</span></span>
           </label>

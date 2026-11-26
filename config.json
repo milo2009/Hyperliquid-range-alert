@@ -2,6 +2,11 @@
   "address": null,
   "dashboardUrl": "https://milo2009.github.io/Hyperliquid-range-alert/",
 
+  "schedule": {
+    "cron": "0 * * * *",
+    "timezone": "Europe/Paris"
+  },
+
   "notifyNear": false,
   "remindEveryHours": 4,
   "notifyAfterConsecutiveFailures": 2,

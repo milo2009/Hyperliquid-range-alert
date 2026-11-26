@@ -1,0 +1,32 @@
+name: Synchro rythme cron-job.org
+
+# Reporte schedule.cron de config.json sur le job cron-job.org qui déclenche monitor.yml.
+on:
+  push:
+    branches: [main]
+    paths: [config.json, docs/cron.js, src/sync-schedule.mjs]
+  workflow_dispatch:
+
+concurrency:
+  group: schedule-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Mettre à jour le job cron-job.org
+        env:
+          CRONJOB_API_KEY: ${{ secrets.CRONJOB_API_KEY }}
+          CRONJOB_JOB_ID: ${{ secrets.CRONJOB_JOB_ID }}
+        run: node src/sync-schedule.mjs

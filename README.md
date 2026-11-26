@@ -70,7 +70,7 @@ L'adresse, le token et le topic ntfy saisis dans l'app ne sont jamais publiés.
       - *Permissions* → *Repository permissions* → **Actions : Read and write** (rien d'autre)
    2. Sur [cron-job.org](https://cron-job.org) (compte gratuit) → **Create cronjob** :
       - *URL* : `https://api.github.com/repos/<toi>/<depot>/actions/workflows/monitor.yml/dispatches`
-      - *Execution schedule* : every hour (ou every 5 minutes pour une surveillance plus serrée)
+      - *Execution schedule* : peu importe, il sera remplacé par le rythme choisi dans les réglages (étape 5)
       - onglet *Advanced* → *Request method* : **POST**
       - *Headers* :
         - `Authorization` : `Bearer <le token>`
@@ -81,12 +81,20 @@ L'adresse, le token et le topic ntfy saisis dans l'app ne sont jamais publiés.
       - active la notification par e-mail en cas d'échec
    3. **Test run** : la réponse doit être `204 No Content`, et une exécution « workflow_dispatch » apparaît dans l'onglet Actions.
 
+5. Rythme réglable depuis l'app : le workflow **Synchro rythme cron-job.org** reporte `schedule.cron` de `config.json` sur ce job à chaque modification.
+   1. Sur cron-job.org : **Settings → API** → crée une clé API (sans restriction d'IP : les serveurs GitHub changent d'adresse).
+   2. Dans le dépôt : secret `CRONJOB_API_KEY` = cette clé. Le job est retrouvé tout seul via son URL (`…/monitor.yml/dispatches`) ; si tu en as plusieurs, ajoute aussi le secret `CRONJOB_JOB_ID` (n° visible dans l'URL du job sur cron-job.org).
+   3. **Actions → Synchro rythme cron-job.org → Run workflow** pour vérifier : le log affiche « mis à jour ✓ » et le prochain passage.
+
+   Quota de l'API cron-job.org : 100 requêtes/jour, chaque enregistrement des réglages en consomme 2 à 3.
+
 > ⚠️ Le token expire à la date choisie à sa création : pense à le renouveler (et à le remplacer dans cron-job.org) avant. Une erreur 401 dans cron-job.org = token expiré.
 
 ## Réglages (`config.json`)
 
 | Clé | Rôle | Défaut |
 |---|---|---|
+| `schedule.cron` | rythme de vérification, cron à 5 champs (heure de Paris), ex. `*/5 * * * *` = toutes les 5 min, `*/2 8-23 * * *` = toutes les 2 min de 8 h à minuit. Reporté sur cron-job.org (étape 5) | `0 * * * *` |
 | `notifyNear` | `false` = notifier seulement les 🚨 (sortie de range, liquidation proche) ; les 🟠 restent visibles sur le tableau de bord | `true` |
 | `notifyAfterConsecutiveFailures` | alerte « Surveillance en échec » après N exécutions ratées d'affilée | `3` |
 | `lp.nearEdgePct` | seuil 🟠 « proche du bord » : prix à moins de X % d'une borne | `3` |
