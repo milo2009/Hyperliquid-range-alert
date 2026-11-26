@@ -15,7 +15,7 @@
     "timezone": "Europe/Paris"
   },
   "lp": {
-    "nearEdgePct": 3,
+    "nearEdgePct": 1,
     "positionManagers": [
       {
         "name": "HyperSwap V3",
