@@ -1,23 +1,19 @@
 {
   "address": null,
   "dashboardUrl": "https://milo2009.github.io/Hyperliquid-range-alert/",
-
   "schedule": {
-    "cron": "0 * * * *",
+    "cron": "*/5 * * * *",
     "timezone": "Europe/Paris"
   },
-
   "notifyNear": false,
   "remindEveryHours": 4,
   "notifyAfterConsecutiveFailures": 2,
-
   "quietHours": {
     "enabled": true,
     "start": "23:00",
     "end": "08:00",
     "timezone": "Europe/Paris"
   },
-
   "lp": {
     "nearEdgePct": 3,
     "positionManagers": [
@@ -30,14 +26,12 @@
       }
     ]
   },
-
   "perps": {
     "enabled": true,
     "liqWarnPct": 15,
     "liqDangerPct": 7,
     "ranges": {}
   },
-
   "manual": {
     "nearEntryPct": 3,
     "positions": [
