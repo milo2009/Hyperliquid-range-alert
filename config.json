@@ -2,7 +2,7 @@
   "address": null,
   "dashboardUrl": "https://milo2009.github.io/Hyperliquid-range-alert/",
   "schedule": {
-    "cron": "*/5 * * * *",
+    "cron": "0 * * * *",
     "timezone": "Europe/Paris"
   },
   "notifyNear": false,
@@ -15,7 +15,7 @@
     "timezone": "Europe/Paris"
   },
   "lp": {
-    "nearEdgePct": 1,
+    "nearEdgePct": 3,
     "positionManagers": [
       {
         "name": "HyperSwap V3",
